@@ -1,0 +1,40 @@
+[project]
+name = "kNN_graphc"
+version = "0.1.0"
+description = "kNN graph construction for self-supervised speech features"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.4.6",
+    "faiss-gpu>=1.14",
+    "tqdm>=4.68.3",
+    "igraph>=1.0.0",
+    "leidenalg==0.11.0",
+    "scikit-learn>=1.9.0",
+    "tgt>=1.5",
+    "tyro>=1.0.15",
+    "torch>=2.12.1",
+    "torchaudio>=2.11.0",
+    "torchcodec>=0.14.0",
+    "cupy-cuda13x>=14.1.1",
+    "pandas>=3.0.3",
+    "matplotlib>=3.11.1",
+    "praat-textgrids>=1.4.0",
+    "soundfile>=0.14.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "pytest",
+    "ruff>=0.15.20",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+markers = [
+    "gpu: requires CUDA GPU and faiss-gpu",
+]

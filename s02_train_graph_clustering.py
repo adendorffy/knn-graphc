@@ -56,10 +56,16 @@ def train_graph_clustering(config: TrainGraphClusteringConfig) -> None:
     del features_pca, pca, scaler
     gc.collect()
 
+    subset_idx = None
     if config.subsample is not None and config.subsample < features.shape[0]:
         print(f"Subsampling {config.subsample} features from {features.shape[0]} total")
         cache_dir = Path(str(config.output_dir).replace("output/clustering", "output/subsample_indices"))
-        subset_idx = get_subsample_indices(features.shape[0], config.subsample, seed=config.subsample_seed, cache_dir=cache_dir)
+        subset_idx = get_subsample_indices(
+            features.shape[0],
+            config.subsample,
+            seed=config.subsample_seed,
+            cache_dir=cache_dir,
+        )
         features = features[subset_idx]
         config.output_dir = config.output_dir.parent / f"{config.output_dir.name}-subsample-{config.subsample}"
         config.output_dir.mkdir(parents=True, exist_ok=True)

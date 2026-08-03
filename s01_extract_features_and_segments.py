@@ -124,7 +124,11 @@ def extract_features_and_segments(config: ExtractFeaturesConfig):
             features_out_path = relative_output_path(
                 path, audio_root, config.features_dir
             )
-            if features_out_path.exists():
+            segments_out_path = relative_output_path(
+                path, audio_root, config.segments_dir
+            )
+            
+            if features_out_path.exists() and segments_out_path.exists():
                 continue
                 
             features_out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,8 +137,13 @@ def extract_features_and_segments(config: ExtractFeaturesConfig):
             valid_features = features[valid_mask]
             valid_durations = durations[valid_mask]
 
+            # Segment durations are per-segment frame/sample counts; convert to
+            # absolute [start, end) boundaries via cumulative sum.
             valid_ends = valid_durations.cumsum(0)
             valid_starts = valid_ends - valid_durations
+
+            # Placeholder unit/label column, populated later by clustering (s02)
+            # and inference (s04). Segment array layout: [start, end, unit_id].
             dummy_units = torch.zeros_like(valid_starts)
             valid_segments = torch.stack([valid_starts, valid_ends, dummy_units], dim=1)
             

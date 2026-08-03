@@ -283,7 +283,13 @@ def main(config: ZipfConfig):
     set_plot_style()
     output_path = set_output_path(config.output_path, config.segments_dir, save_as_png=config.save_as_png, not_clusters=config.not_clusters)
     
+    # Allow segments_dir to contain a dataset wildcard such as train-*; each matched
+    # child directory is treated as one induced clustering output to aggregate.
+    phone_sequences = []
+
     if "*" in str(config.segments_dir):
+        # Allow segments_dir to contain a dataset wildcard such as train-*; each matched
+        # child directory is treated as one induced clustering output to aggregate.
         parts = config.segments_dir.parts
         wildcard_idx = next(
             i for i, part in enumerate(parts)
@@ -293,7 +299,7 @@ def main(config: ZipfConfig):
         rest = "/".join(parts[wildcard_idx:])
         segments_dirs = sorted(base.glob(f"{rest}/*"))
     else:
-        segments_dirs = [config.segments_dir.glob({"*"})]  
+        segments_dirs = [config.segments_dir]
 
 
     print(f"How many subdirs: {len(segments_dirs)}")

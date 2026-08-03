@@ -5,6 +5,8 @@ set -euo pipefail
 # Experiment configuration
 ###############################################################################
 
+# INFERENCE_DATASET may be a glob such as LibriSpeech/train-*; downstream
+# scripts expand this to run inference/evaluation across all matching subsets.
 TRAIN_DATASET="LibriSpeech/train-clean-100"
 INFERENCE_DATASET="LibriSpeech/train-*"
 
@@ -28,7 +30,7 @@ RUN_EXTRACT=false
 RUN_TRAIN_MODELS=false
 RUN_GRAPH=false
 RUN_KMEANS=false
-RUN_INFERENCE=false
+RUN_INFERENCE=true
 RUN_EVALUATE=true
 SAVE_TO_CSV=true
 RUN_ZIPF=false
@@ -72,7 +74,6 @@ if $RUN_EXTRACT; then
         --wavlm-ckpt-path ../checkpoints/WavLM-Large.pt \
         --batch-size 4 \
         --num-workers 8
-
 fi
 
 ###############################################################################
@@ -80,13 +81,12 @@ fi
 ###############################################################################
 
 if $RUN_TRAIN_MODELS; then
-    banner "Training scaler and PCA"
+    banner "Training scaler and PCA on ${TRAIN_DATASET}"
 
     uv run python s01b_train_scaler_pca_models.py \
-        --config.features-dir "${FEATURES_DIR}/${INFERENCE_DATASET}" \
-        --config.output-dir "${MODELS_DIR}/${INFERENCE_DATASET}" \
+        --config.features-dir "${FEATURES_DIR}/${TRAIN_DATASET}" \
+        --config.output-dir "${MODELS_DIR}/${TRAIN_DATASET}" \
         --config.number_of_components "${PCA_COMPONENTS}"
-
 fi
 
 ###############################################################################
@@ -102,12 +102,11 @@ if $RUN_GRAPH; then
         --scaler-path "${MODELS_DIR}/${TRAIN_DATASET}/scaler.joblib" \
         --pca-path "${MODELS_DIR}/${TRAIN_DATASET}/pca.joblib" \
         --edges.min-sim "${TAU}" \
-        --edges.num-neighbors "${K}" \
+        --edges.num-neighbors "${KNN_NEIGHBORS}" \
         --cluster.resolution-specified "${GAMMA}" \
         --cluster.leiden-iterations "${LEIDEN_ITERS}" \
         --output-dir "${CLUSTERING_ROOT}/${TRAIN_DATASET}" \
         --show-progress
-
 fi
 
 ###############################################################################
@@ -125,53 +124,67 @@ if $RUN_KMEANS; then
         --output-dir "${CLUSTERING_ROOT}/${TRAIN_DATASET}" \
         --num-clusters "${K}" \
         --show-progress
-
 fi
 
 ###############################################################################
-# Locate graph output automatically
+# Locate clustering output automatically
 ###############################################################################
 
+# Reuse the most recent clustering/artifact directory matching the current
+# hyperparameters, so inference can be run without manually copying run names.
 if [ "${CLUSTERING_METHOD}" = "graph_knn" ]; then
     echo "Using graph clustering method: ${CLUSTERING_METHOD}"
+
     CLUSTER_OUTPUT_DIR=$(
-    find "${CLUSTERING_ROOT}/${TRAIN_DATASET}" \
-        -maxdepth 1 \
-        -type d \
-        -name "${CLUSTERING_METHOD}_${K}_tau_${TAU}_gamma_${GAMMA}_*" \
-    | sort \
-    | tail -n1
+        find "${CLUSTERING_ROOT}/${TRAIN_DATASET}" \
+            -maxdepth 1 \
+            -type d \
+            -name "${CLUSTERING_METHOD}_${KNN_NEIGHBORS}_tau_${TAU}_gamma_${GAMMA}_*" \
+        | sort \
+        | tail -n1
     )
 
     ARTIFACT_DIR=$(
-    find "${ARTIFACTS_ROOT}/${TRAIN_DATASET}" \
-        -maxdepth 1 \
-        -type d \
-        -name "${CLUSTERING_METHOD}_${K}_tau_${TAU}_gamma_${GAMMA}_*" \
-    | sort \
-    | tail -n1
+        find "${ARTIFACTS_ROOT}/${TRAIN_DATASET}" \
+            -maxdepth 1 \
+            -type d \
+            -name "${CLUSTERING_METHOD}_${KNN_NEIGHBORS}_tau_${TAU}_gamma_${GAMMA}_*" \
+        | sort \
+        | tail -n1
     )
 
 elif [ "${CLUSTERING_METHOD}" = "kmeans++" ]; then
     echo "Using k-means clustering method: ${CLUSTERING_METHOD}"
+
     CLUSTER_OUTPUT_DIR=$(
-    find "${CLUSTERING_ROOT}/${TRAIN_DATASET}" \
-        -maxdepth 1 \
-        -type d \
-        -name "${CLUSTERING_METHOD}_clusters_${K}_*" \
-    | sort \
-    | tail -n1
+        find "${CLUSTERING_ROOT}/${TRAIN_DATASET}" \
+            -maxdepth 1 \
+            -type d \
+            -name "${CLUSTERING_METHOD}_clusters_${K}_*" \
+        | sort \
+        | tail -n1
     )
+
     ARTIFACT_DIR=$(
-    find "${ARTIFACTS_ROOT}/${TRAIN_DATASET}" \
-        -maxdepth 1 \
-        -type d \
-        -name "${CLUSTERING_METHOD}_clusters_${K}_*" \
-    | sort \
-    | tail -n1
+        find "${ARTIFACTS_ROOT}/${TRAIN_DATASET}" \
+            -maxdepth 1 \
+            -type d \
+            -name "${CLUSTERING_METHOD}_clusters_${K}_*" \
+        | sort \
+        | tail -n1
     )
 else
     echo "Unknown clustering method: ${CLUSTERING_METHOD}"
+    exit 1
+fi
+
+if [[ -z "${CLUSTER_OUTPUT_DIR}" ]]; then
+    echo "Could not find clustering output directory."
+    exit 1
+fi
+
+if [[ -z "${ARTIFACT_DIR}" ]]; then
+    echo "Could not find clustering artifact directory."
     exit 1
 fi
 
@@ -183,29 +196,29 @@ echo "Located clustering artifact directory: ${ARTIFACT_DIR}"
 ###############################################################################
 
 if $RUN_INFERENCE; then
-banner "Running inference"
+    banner "Running inference"
 
-if [ "${CLUSTERING_METHOD}" = "kmeans++" ]; then
-    uv run python s04_infer_labels.py \
-        --clustering-method "${CLUSTERING_METHOD}" \
-        --features-dir "${FEATURES_DIR}/${INFERENCE_DATASET}" \
-        --segments-dir "${SEGMENTS_DIR}/${INFERENCE_DATASET}" \
-        --models-dir "${MODELS_DIR}/${TRAIN_DATASET}" \
-        --reference-dir "${ARTIFACT_DIR}" \
-        --clustering-dir "${CLUSTER_OUTPUT_DIR}" 
+    if [ "${CLUSTERING_METHOD}" = "kmeans++" ]; then
+        uv run python s04_infer_labels.py \
+            --clustering-method "${CLUSTERING_METHOD}" \
+            --features-dir "${FEATURES_DIR}/${INFERENCE_DATASET}" \
+            --segments-dir "${SEGMENTS_DIR}/${INFERENCE_DATASET}" \
+            --models-dir "${MODELS_DIR}/${TRAIN_DATASET}" \
+            --reference-dir "${ARTIFACT_DIR}" \
+            --clustering-dir "${CLUSTER_OUTPUT_DIR}"
 
-elif [ "${CLUSTERING_METHOD}" = "graph_knn" ]; then
-    uv run python s04_infer_labels.py \
-        --clustering-method "${CLUSTERING_METHOD}" \
-        --features-dir "${FEATURES_DIR}/${INFERENCE_DATASET}" \
-        --segments-dir "${SEGMENTS_DIR}/${INFERENCE_DATASET}" \
-        --models-dir "${MODELS_DIR}/${TRAIN_DATASET}" \
-        --reference-dir "${ARTIFACT_DIR}" \
-        --clustering-dir "${CLUSTER_OUTPUT_DIR}" \
-        --k-neighbors "${KNN_NEIGHBORS}" \
-        --hnsw-m "${HNSW_M}" \
-        --hnsw-ef-search "${HNSW_SEARCH}" 
-fi 
+    elif [ "${CLUSTERING_METHOD}" = "graph_knn" ]; then
+        uv run python s04_infer_labels.py \
+            --clustering-method "${CLUSTERING_METHOD}" \
+            --features-dir "${FEATURES_DIR}/${INFERENCE_DATASET}" \
+            --segments-dir "${SEGMENTS_DIR}/${INFERENCE_DATASET}" \
+            --models-dir "${MODELS_DIR}/${TRAIN_DATASET}" \
+            --reference-dir "${ARTIFACT_DIR}" \
+            --clustering-dir "${CLUSTER_OUTPUT_DIR}" \
+            --k-neighbors "${KNN_NEIGHBORS}" \
+            --hnsw-m "${HNSW_M}" \
+            --hnsw-ef-search "${HNSW_SEARCH}"
+    fi
 fi
 
 ###############################################################################
@@ -215,13 +228,15 @@ fi
 CLUSTER_INFO=$(basename "${CLUSTER_OUTPUT_DIR}")
 
 if [ "${CLUSTERING_METHOD}" = "graph_knn" ]; then
-    INFERRED_DIR="${INFERRED_ROOT}/${INFERENCE_DATASET}/knn_${KNN_NEIGHBORS}_hnswm_${HNSW_M}_search_${HNSW_SEARCH}/zerosyl/inference-test/${TRAIN_DATASET}/${CLSTER_INFO}"
+    INFERRED_DIR="${INFERRED_ROOT}/${INFERENCE_DATASET}/knn_${KNN_NEIGHBORS}_hnswm_${HNSW_M}_search_${HNSW_SEARCH}/zerosyl/inference-test/${TRAIN_DATASET}/${CLUSTER_INFO}"
 elif [ "${CLUSTERING_METHOD}" = "kmeans++" ]; then
     INFERRED_DIR="${INFERRED_ROOT}/${INFERENCE_DATASET}/kmeans++_${K}/zerosyl/inference-test/${TRAIN_DATASET}/${CLUSTER_INFO}"
 else
     echo "Unknown clustering method: ${CLUSTERING_METHOD}"
     exit 1
 fi
+
+echo "Inferred output directory: ${INFERRED_DIR}"
 
 ###############################################################################
 # Evaluation
@@ -251,13 +266,17 @@ fi
 if $RUN_ZIPF; then
     banner "Plotting Zipf"
 
-    uv run python zipf.py \
+    ZIPF_MATCHING_METHOD="${CLUSTERING_METHOD}"
+    if [ "${CLUSTERING_METHOD}" = "kmeans++" ]; then
+        ZIPF_MATCHING_METHOD="kmeans"
+    fi
+
+    uv run python s05_zipf.py \
         --textgrid-dir "${DATA_DIR}/alignments/${INFERENCE_DATASET}" \
         --segments-dir "${INFERRED_DIR}" \
         --output-path figs \
         --save-as-png \
-        --matching-method "${CLUSTERING_METHOD}"
-
+        --matching-method "${ZIPF_MATCHING_METHOD}"
 fi
 
 banner "Done"

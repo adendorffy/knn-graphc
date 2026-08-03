@@ -51,46 +51,44 @@ def print_clustering_metrics(metadata: dict, metrics: ClusteringMetrics) -> None
     print("-" * 40)
 
 def metadata_from_segments_dir(segments_dir: Path) -> dict:
-    """
-    Extract metadata from the segments_dir path.
-    """
     metadata = {}
+
+    num_neighbours = None
+    min_sim = None
+    resolution = None
+
     info_string = segments_dir.name
     parts = info_string.split("_")
+
     if parts[0] == "graph":
         if parts[1] == "knn":
             metadata["clustering"] = "graph_knn"
             num_neighbours = int(parts[2])
             min_sim = float(parts[4])
             resolution = float(parts[6])
+
             if "inferred_segments" in str(segments_dir):
                 metadata["clustering"] = "graph_knn_inferred"
-                new_parts = segments_dir.parts[5].split("_")
-                k_vote = int(new_parts[2])
-                ef_search = int(new_parts[-1])
-                metadata["k_vote"] = k_vote
-                metadata["ef_search"] = ef_search
+                vote_part = next(
+                    p for p in segments_dir.parts if p.startswith("knn_")
+                )
+                new_parts = vote_part.split("_")
+                metadata["k_vote"] = int(new_parts[2])
+                metadata["ef_search"] = int(new_parts[-1])
 
         elif parts[1] == "full":
             metadata["clustering"] = "graph_full"
-            num_neighbours = None
             min_sim = float(parts[3])
             resolution = float(parts[5])
 
-    elif parts[0] == "kmeans" or parts[0] == "kmeans++":
+    elif parts[0] in {"kmeans", "kmeans++"}:
         metadata["clustering"] = "kmeans"
-        num_neighbours = None
-        min_sim = None
-        resolution = None
         if "inferred_segments" in str(segments_dir):
             metadata["clustering"] = "kmeans_inferred"
-    
+
     metadata["num_neighbours"] = num_neighbours
     metadata["min_sim"] = min_sim
     metadata["resolution"] = resolution
-    metadata["num_clusters"] = int(parts[-5])
-    metadata["runtime_seconds"] = float(parts[-3])
-    metadata["peak_ram_mb"] = float(parts[-1])
 
     return metadata
 

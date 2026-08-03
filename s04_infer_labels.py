@@ -89,6 +89,7 @@ def infer_labels(config: InferLabelsConfig) -> None:
         centroids = np.load(
             config.reference_dir / "centroids.npy"
         ).astype(np.float32, copy=False)
+        num_centroids = len(centroids)
 
         centroids = np.ascontiguousarray(centroids, dtype=np.float32)
 
@@ -162,7 +163,6 @@ def infer_labels(config: InferLabelsConfig) -> None:
     features_info = config.features_dir.parts[2:]  
     output_segments_dir = Path("output/inferred_segments") / Path(*features_info) / f"knn_{config.k_neighbors}_hnswm_{config.hnsw_m}_search_{config.hnsw_ef_search}" / config.clustering_dir.relative_to(Path("output/clustering"))
     if config.clustering_method == "kmeans++":
-        num_clusters = len(np.load(config.reference_dir / "centroids.npy"))
         output_segments_dir = Path("output/inferred_segments") / Path(*features_info) / f"kmeans++_{num_clusters}" / config.clustering_dir.relative_to(Path("output/clustering"))
     output_segments_dir.mkdir(parents=True, exist_ok=True)
     print(f"Saving inferred segment labels to {output_segments_dir}")
@@ -173,9 +173,10 @@ def infer_labels(config: InferLabelsConfig) -> None:
     batch_segments = []
     batch_output_paths = []
     batch_lengths = []
+    current_batch_size = 0
 
     def flush_batch():
-        nonlocal batch_features, batch_segments, batch_output_paths, batch_lengths
+        nonlocal batch_features, batch_segments, batch_output_paths, batch_lengths, current_batch_size
 
         if not batch_features:
             return
@@ -227,8 +228,8 @@ def infer_labels(config: InferLabelsConfig) -> None:
         batch_segments = []
         batch_output_paths = []
         batch_lengths = []
+        current_batch_size = 0
 
-    current_batch_size = 0
     with track_resources() as usage_tracker:
         for dataset_dir, segment_dataset_dir, feature_path in tqdm(
             feature_entries, 
@@ -271,7 +272,6 @@ def infer_labels(config: InferLabelsConfig) -> None:
 
             if current_batch_size >= max_batch_segments:
                 flush_batch()
-                current_batch_size = 0
 
         flush_batch()
 

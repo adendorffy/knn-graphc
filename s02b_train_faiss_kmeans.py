@@ -6,7 +6,6 @@ import numpy as np
 import tyro
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import kmeans_plusplus
 import faiss
 
 from src.load import load_features, get_subsample_indices
@@ -51,7 +50,8 @@ def train_kmeans(config: TrainKmeansClusteringConfig) -> None:
     features = scaler.transform(features)
     features = pca.transform(features)
     features = np.ascontiguousarray(features, dtype=np.float32)
-
+    
+    subset_idx = None
     if config.subsample is not None and config.subsample < features.shape[0]:
         print(f"Subsampling {config.subsample} features from {features.shape[0]} total")
         cache_dir = Path(str(config.output_dir).replace("output/clustering", "output/subsample_indices"))
@@ -73,7 +73,7 @@ def train_kmeans(config: TrainKmeansClusteringConfig) -> None:
         acoustic_model.train(features)
 
         _, index = acoustic_model.index.search(features, 1)
-        labels = index.flatten()
+        labels = index.flatten().astype(np.int64, copy=False)
 
 
     save_labeled_segments_from_membership(
@@ -95,7 +95,7 @@ def train_kmeans(config: TrainKmeansClusteringConfig) -> None:
         output_dir=config.output_dir,
         centroids=acoustic_model.centroids,
         features=None, 
-        labels=None,
+        labels=labels,
         metadata={
             "features_dir": str(config.features_dir),
             "clustering": "kmeans++",

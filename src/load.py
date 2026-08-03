@@ -49,7 +49,7 @@ def load_features(input_dir: Path | str, show_progress: bool = True) -> np.ndarr
 
 def get_subsample_indices(
     total_features: int,
-    subsample: float,
+    subsample_frac: float,
     seed: int = 0,
     cache_dir: Path = Path("output/subsample_indices"),
 ) -> np.ndarray:
@@ -59,13 +59,13 @@ def get_subsample_indices(
     what other random calls have happened elsewhere in the process.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"n{total_features}_sub{subsample}_seed{seed}.npy"
+    cache_path = cache_dir / f"n{total_features}_sub{subsample_frac}_seed{seed}.npy"
 
     if cache_path.exists():
         return np.load(cache_path)
 
     rng = np.random.default_rng(seed)  # independent of global np.random state
-    subsample_int = int(subsample*total_features)
+    subsample_int = int(subsample_frac*total_features)
     indices = rng.choice(total_features, subsample_int, replace=False)
     indices.sort()
     np.save(cache_path, indices)

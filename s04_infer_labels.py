@@ -89,7 +89,7 @@ def infer_labels(config: InferLabelsConfig) -> None:
         centroids = np.load(
             config.reference_dir / "centroids.npy"
         ).astype(np.float32, copy=False)
-        num_centroids = len(centroids)
+        num_clusters = len(centroids)
 
         centroids = np.ascontiguousarray(centroids, dtype=np.float32)
 

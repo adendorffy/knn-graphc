@@ -6,8 +6,8 @@ import joblib
 import numpy as np
 import tyro
 from tqdm import tqdm
+import os
 
-from src.save import save_labeled_segments_from_membership
 from src.track import track_resources
 
 @dataclass
@@ -84,6 +84,7 @@ def infer_labels(config: InferLabelsConfig) -> None:
     pca = joblib.load(config.models_dir / "pca.joblib") if config.models_dir is not None else None
 
     reference_labels = None
+    faiss.omp_set_num_threads(os.cpu_count())
 
     if config.clustering_method == "kmeans++":
         centroids = np.load(

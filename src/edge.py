@@ -5,6 +5,7 @@ import faiss
 import numpy as np
 from tqdm import tqdm
 from typing import Optional
+import os 
 
 
 @dataclass
@@ -43,6 +44,8 @@ def build_edges_knn(
     num_nodes, dim = features.shape
     assert config.num_neighbors >= 1
     assert config.num_neighbors <= num_nodes
+
+    faiss.omp_set_num_threads(os.cpu_count())
 
     features = np.ascontiguousarray(features, dtype=np.float32)
     faiss.normalize_L2(features)

@@ -73,7 +73,7 @@ def metadata_from_segments_dir(segments_dir: Path) -> dict:
                     p for p in segments_dir.parts if p.startswith("knn_")
                 )
                 new_parts = vote_part.split("_")
-                metadata["k_vote"] = int(new_parts[2])
+                metadata["k_vote"] = int(new_parts[1])
                 metadata["ef_search"] = int(new_parts[-1])
 
         elif parts[1] == "full":

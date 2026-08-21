@@ -397,11 +397,11 @@ Then run the relevant pipeline scripts with `uv run`.
 If you use this code, please cite the associated work once available.
 
 ```bibtex
-@misc{slabbert2026graphclustering,
-  title  = {Scaling Graph Clustering for Unsupervised Speech Unit Discovery},
-  author = {Slabbert, Danel and Kamper, Herman},
+@article{anonymous2026scaling_graph,
+  title  = {Towards Scalable Graph-Based Lexicon Induction from Unlabelled Speech Audio},
+  author = {Anonymous Authors},
   year   = {2026},
-  note   = {Code repository}
+  journal = {arXiv preprint}
 }
 ```
 

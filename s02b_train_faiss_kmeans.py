@@ -46,11 +46,6 @@ def train_kmeans(config: TrainKmeansClusteringConfig) -> None:
     scaler: StandardScaler = joblib.load(config.scaler_path)
     pca: PCA = joblib.load(config.pca_path)
 
-    features = load_features(config.features_dir, show_progress=config.show_progress)
-    features = scaler.transform(features)
-    features = pca.transform(features)
-    features = np.ascontiguousarray(features, dtype=np.float32)
-    
     subset_idx = None
     if config.subsample is not None and config.subsample < features.shape[0]:
         print(f"Subsampling {config.subsample} features from {features.shape[0]} total")
@@ -60,20 +55,39 @@ def train_kmeans(config: TrainKmeansClusteringConfig) -> None:
         config.output_dir = config.output_dir.parent / f"{config.output_dir.name}-subsample-{config.subsample}"
         config.output_dir.mkdir(parents=True, exist_ok=True)
 
-    with track_resources() as usage:
-        acoustic_model = faiss.Kmeans(
-            d=features.shape[1],
-            k=config.num_clusters,
-            niter=15,
-            init_method=faiss.ClusteringInitMethod_KMEANS_PLUS_PLUS,
-            nredo=1,
-            verbose=True,
-            gpu=True,
-        )
-        acoustic_model.train(features)
+    features = load_features(config.features_dir, show_progress=config.show_progress)
+    features = scaler.transform(features)
+    features = pca.transform(features)
+    features = np.ascontiguousarray(features, dtype=np.float32)
 
-        _, index = acoustic_model.index.search(features, 1)
-        labels = index.flatten().astype(np.int64, copy=False)
+    d = features.shape[1]
+    ngpu = faiss.get_num_gpus()
+
+    res = [faiss.StandardGpuResources() for _ in range(max(ngpu, 1))]
+    cfg = faiss.GpuIndexFlatConfig()
+    cfg.useFloat16 = True
+
+    if ngpu > 1:
+        indexes = [faiss.GpuIndexFlatL2(res[i], d, cfg) for i in range(ngpu)]
+        index = faiss.IndexShards(d)
+        for idx in indexes:
+            index.add_shard(idx)
+    else:
+        index = faiss.GpuIndexFlatL2(res[0], d, cfg)
+
+
+    with track_resources() as usage:
+        clustering = faiss.Clustering(d, config.num_clusters)
+        clustering.niter = 15
+        clustering.nredo = 1
+        clustering.verbose = True
+        clustering.init_method = faiss.ClusteringInitMethod_KMEANS_PLUS_PLUS
+
+        clustering.train(features, index)
+
+        _, index_out = index.search(features, 1)
+        labels = index_out.flatten().astype(np.int64, copy=False)
+        centroids = faiss.vector_to_array(clustering.centroids).reshape(config.num_clusters, d)
 
 
     save_labeled_segments_from_membership(
@@ -93,7 +107,7 @@ def train_kmeans(config: TrainKmeansClusteringConfig) -> None:
     )
     save_clustering_artifacts(
         output_dir=config.output_dir,
-        centroids=acoustic_model.centroids,
+        centroids=centroids,
         features=None, 
         labels=labels,
         metadata={

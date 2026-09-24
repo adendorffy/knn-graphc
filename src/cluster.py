@@ -28,8 +28,8 @@ class ClusterConfig:
     seed: int | None = 42
 
     def __post_init__(self):
-        if self.resolution_specified is not None:
-            self.resolution_init_low = self.resolution_specified - 0.1
+        if self.resolution_specified is not None and self.cluster_count_target is not None:
+            self.resolution_init_low = max(0.0, self.resolution_specified - 0.1)
             self.resolution_init_high = self.resolution_specified + 0.1
 
 # pickling and passing the graph to all workers is inefficient, so let's make it global context
@@ -108,19 +108,42 @@ def partition_with_target_clusters(
     config: ClusterConfig,
     show_progress: bool = True,
 ) -> tuple[la.CPMVertexPartition, float]:
+    
+    search_requested = config.cluster_count_target is not None
 
-    if show_progress:
-        print(
-            f"Optimizing resolution from {config.resolution_init_low:.6f} to {config.resolution_init_high:.6f} "
-            f"to find ~{config.cluster_count_target} clusters (±{config.cluster_count_tolerance}) "
-            f"using {config.search_worker_count} workers..."
-        )
-
-    if config.resolution_specified is not None:
+    if config.resolution_specified is not None and search_requested:
         if show_progress:
             print(
-                f"Resolution specified: {config.resolution_specified:.6f}. Skipping search."
+                f"Searching around specified resolution {config.resolution_specified:.6f} "
+                f"from {config.resolution_init_low:.6f} to {config.resolution_init_high:.6f} "
+                f"to find ~{config.cluster_count_target} clusters "
+                f"(±{config.cluster_count_tolerance}) "
+                f"using {config.search_worker_count} workers..."
             )
+
+        searcher = ClusterResolutionSearcher(config, show_progress=show_progress)
+
+        best_res, best_output, best_diff, best_state = searcher.search(
+            context=graph,
+            show_progress=show_progress,
+        )
+
+        if (
+            show_progress
+            and best_diff is not None
+            and best_diff > config.cluster_count_tolerance
+        ):
+            print(
+                f"Max iterations reached. Best diff was {best_diff} at res={best_res:.6f}"
+            )
+
+    elif config.resolution_specified is not None:
+        if show_progress:
+            print(
+                f"Resolution specified: {config.resolution_specified:.6f}. "
+                f"Skipping search."
+            )
+
         best_res = config.resolution_specified
         best_state = la.find_partition(
             graph=graph,
@@ -132,15 +155,22 @@ def partition_with_target_clusters(
             seed=config.seed,
         )
         best_output = len(best_state)
-        if config.cluster_count_target is not None:
-            best_diff = abs(best_output - config.cluster_count_target)
-        else:
-            best_diff = None
-    else:
+
+    elif search_requested:
+        if show_progress:
+            print(
+                f"Optimizing resolution from {config.resolution_init_low:.6f} "
+                f"to {config.resolution_init_high:.6f} "
+                f"to find ~{config.cluster_count_target} clusters "
+                f"(±{config.cluster_count_tolerance}) "
+                f"using {config.search_worker_count} workers..."
+            )
+
         searcher = ClusterResolutionSearcher(config, show_progress=show_progress)
 
         best_res, best_output, best_diff, best_state = searcher.search(
-            context=graph, show_progress=show_progress
+            context=graph,
+            show_progress=show_progress,
         )
 
         if (
@@ -151,6 +181,10 @@ def partition_with_target_clusters(
             print(
                 f"Max iterations reached. Best diff was {best_diff} at res={best_res:.6f}"
             )
+    else:
+        raise ValueError(
+            "Either resolution_specified or cluster_count_target must be set."
+        )
 
     assert best_state is not None
 

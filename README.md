@@ -285,7 +285,6 @@ The script can plot:
 
 * induced cluster distributions
 * discovered phone-sequence distributions
-* phone, biphone and triphone distributions
 
 ## Running the orchestration script
 
@@ -397,11 +396,11 @@ Then run the relevant pipeline scripts with `uv run`.
 If you use this code, please cite the associated work once available.
 
 ```bibtex
-@article{anonymous2026scaling_graph,
+@article{slabbert2026scaling_graph,
   title  = {Towards Scalable Graph-Based Lexicon Induction from Unlabelled Speech Audio},
-  author = {Anonymous Authors},
+  author = {Danel Slabbert and Nicol Visser and Herman Kamper},
   year   = {2026},
-  journal = {arXiv preprint}
+  journal = {CCIS}
 }
 ```
 

@@ -288,7 +288,7 @@ The script can plot:
 
 ## Running the orchestration script
 
-The `run.sh` script provides a configurable end-to-end experiment runner. Edit the configuration block at the top of the file:
+The `main.sh` script provides a configurable end-to-end experiment runner. Edit the configuration block at the top of the file:
 
 ```bash
 TRAIN_DATASET="LibriSpeech/train-clean-100"
